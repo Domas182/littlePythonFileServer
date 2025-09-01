@@ -42,6 +42,17 @@ def index():
         input[type="submit"] {{ background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }}
         input[type="submit"]:hover {{ background-color: #218838; }}
         progress {{ width: 100%; height: 25px; margin-top: 10px; }}
+        #cancel-btn {{
+            display: none;
+            background-color: #dc3545;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }}
+        #cancel-btn:hover {{ background-color: #c82333; }}
         #status {{ margin-top: 10px; font-weight: bold; }}
       </style>
     </head>
@@ -52,6 +63,7 @@ def index():
         <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
           <input type="file" name="file" id="file-input" required>
           <input type="submit" value="Upload">
+          <button type="button" id="cancel-btn">Cancel</button>
         </form>
 
         <progress id="progress-bar" value="0" max="100"></progress>
@@ -74,8 +86,25 @@ def index():
         <script>
             const form = document.getElementById('upload-form');
             const fileInput = document.getElementById('file-input');
+            const submitBtn = form.querySelector('input[type="submit"]');
             const progressBar = document.getElementById('progress-bar');
             const status = document.getElementById('status');
+            const cancelBtn = document.getElementById('cancel-btn');
+
+            let xhr;
+
+            function resetForm() {
+                fileInput.disabled = false;
+                submitBtn.disabled = false;
+                cancelBtn.style.display = 'none';
+                progressBar.value = 0;
+            }
+
+            cancelBtn.addEventListener('click', function() {
+                if (xhr) {
+                    xhr.abort();
+                }
+            });
 
             form.addEventListener('submit', function(event) {
                 // Prevent the default form submission
@@ -87,40 +116,54 @@ def index():
                     return;
                 }
 
+                // UI changes for upload start
+                fileInput.disabled = true;
+                submitBtn.disabled = true;
+                cancelBtn.style.display = 'inline-block';
+
                 // Create a FormData object to hold the file
                 const formData = new FormData();
                 formData.append('file', file);
 
                 // Create a new XMLHttpRequest
-                const xhr = new XMLHttpRequest();
+                xhr = new XMLHttpRequest();
 
                 // Listen for progress events
                 xhr.upload.addEventListener('progress', function(event) {
                     if (event.lengthComputable) {
                         const percentComplete = (event.loaded / event.total) * 100;
                         progressBar.value = percentComplete;
-                        status.textContent = `Uploading... ${Math.round(percentComplete)}%`;
+                        status.textContent = 'Uploading... ' + Math.round(percentComplete) + '%';
                     }
                 });
 
                 // Handle successful upload
                 xhr.addEventListener('load', function() {
-                    status.textContent = 'Upload complete! Refreshing...';
-                    progressBar.value = 100;
-                    // Reload the page to see the new file in the list
-                    window.location.reload();
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        status.textContent = 'Upload complete! Refreshing...';
+                        progressBar.value = 100;
+                        window.location.reload();
+                    } else {
+                        status.textContent = 'Upload failed: ' + (xhr.statusText || 'Server error');
+                        resetForm();
+                    }
                 });
 
                 // Handle upload errors
                 xhr.addEventListener('error', function() {
-                    status.textContent = 'Upload failed. Please try again.';
-                    progressBar.value = 0;
+                    status.textContent = 'Upload failed. A network error occurred.';
+                    resetForm();
+                });
+
+                // Handle upload cancellation
+                xhr.addEventListener('abort', function() {
+                    status.textContent = 'Upload canceled.';
+                    resetForm();
                 });
 
                 // Open the request and send the file
                 xhr.open('POST', '/upload');
                 xhr.send(formData);
-                status.textContent = 'Starting upload...';
             });
         </script>
 
